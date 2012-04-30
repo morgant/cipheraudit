@@ -30,7 +30,7 @@ function usage() {
 	echo "Usage: $0 [options] [-p http|smtp|imap] server port"
 	echo "  -h      print these usage instructions"
 	echo "  -v      verbose output"
-	echo "  -p      protocol to test"
+	echo "  -p      protocol to test (default: 'http')"
 	echo "  server  IP address or FQDN of the server to test"
 	echo "  port    port number of the service to test"
 }
