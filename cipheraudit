@@ -7,10 +7,13 @@
 # v0.2   - 2011-09-27 - Morgan Aldridge <morgant@makkintosshu.com>
 #                       Modernized bash, show which suite the tested cypher belongs to, made
 #                       stand-alone tool requiring no editing to test different hosts/ports.
+# v0.3   - 2012-04-30 - Morgan Aldridge
+#                       Added support for the SMTP protocol.
 # 
 
 server=''
 port=''
+protocol=''
 verbose=false
 delay=1
 ciphers=$(openssl ciphers 'ALL:eNULL:aNULL' | sed -e 's/:/ /g')
@@ -24,11 +27,12 @@ echo "Obtained cipher list from $(openssl version)."
 
 # print usage instructions
 function usage() {
-	echo "Usage: $0 [options] server port"
-	echo "  -h	print these usage instructions"
-	echo "  -v	verbose output"
-	echo "  server	IP address or FQDN of the server to test"
-	echo "  port	port number of the service to test"
+	echo "Usage: $0 [options] [-p http|smtp|imap] server port"
+	echo "  -h      print these usage instructions"
+	echo "  -v      verbose output"
+	echo "  -p      protocol to test"
+	echo "  server  IP address or FQDN of the server to test"
+	echo "  port    port number of the service to test"
 }
 
 function in_array()
@@ -55,6 +59,25 @@ if [ $# -gt 0 ]; then
 		# requesting verbose output?
 		elif [ "$1" = "-v" ]; then
 			verbose=true
+			shift
+		# handle protocol
+		elif [ "$1" = "-p" ]; then
+			shift
+			case "$1" in
+				http)
+					# don't actually need to do anything here, just need to validate it as an option
+					;;
+				smtp)
+					protocol="-starttls smtp -crlf"
+					;;
+				imap)
+					protocol="-starttls imap -crlf"
+					;;
+				*)
+					echo "ERROR: Unknown protocol '$1' specified! Unable to proceed!"
+					exit 1
+					;;
+			esac
 			shift
 		# handle server & port arguments
 		else
@@ -89,7 +112,7 @@ for cipher in ${ciphers[@]}; do
 	echo -n ")... "
 	
 	# test the cipher under 
-	result=$(echo -n | openssl s_client -cipher "$cipher" -connect "$server:$port" 2>&1)
+	result=$(echo -n | openssl s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)
 	if [[ "$result" =~ "Cipher is " ]] ; then
 		echo "YES"
 	else
@@ -109,7 +132,7 @@ for cipher in ${ciphers[@]}; do
 done
 
 echo -n "Testing SSLv2 support on $server:$port... " 
-result=$(echo -n | openssl s_client -ssl2 -connect "$server:$port" 2>&1)
+result=$(echo -n | openssl s_client -ssl2 $protocol -connect "$server:$port" 2>&1)
 if [[ "$result" =~ "Cipher is" ]] ; then
 	echo "Supported. INSECURE!"
 else
@@ -121,4 +144,4 @@ if $verbose; then
 	echo $error
 fi
 echo -n "Testing SSL secure renegotiation on $server:$port... "
-echo -n "" | openssl s_client -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
+echo -n "" | openssl s_client $protocol -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
