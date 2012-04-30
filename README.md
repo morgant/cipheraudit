@@ -10,9 +10,9 @@ A `bash` utility to simplify auditing SSL/TLS cipher suites on web & email serve
 
 Example usage:
 
-	cipheraudit www.google.com:443
+	cipheraudit www.google.com 443
 
-	cipheraudit -p smtp smtp.gmail.com:587
+	cipheraudit -p smtp smtp.gmail.com 587
 
 **Note:** This is intended to be run against _your own_ servers even though I've used Google above examples. I use this for verifying my server configurations for PCI compliance and do not condone any use against others' servers, esp. for intrusion attempts.
 
