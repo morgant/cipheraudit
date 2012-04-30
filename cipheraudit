@@ -1,30 +1,124 @@
 #!/bin/bash
 
 # 
-# http://superuser.com/questions/109213/is-there-a-tool-that-can-test-what-ssl-tls-cipher-suites-a-particular-website-of/224263#224263
+# cipheraudit
+# 
+# v0.1   - 2010-12-20 - http://superuser.com/questions/109213/is-there-a-tool-that-can-test-what-ssl-tls-cipher-suites-a-particular-website-off/224263#224263
+# v0.2   - 2011-09-27 - Morgan Aldridge <morgant@makkintosshu.com>
+#                       Modernized bash, show which suite the tested cypher belongs to, made
+#                       stand-alone tool requiring no editing to test different hosts/ports.
 # 
 
-# OpenSSL requires the port number.
-SERVER=192.168.1.11:443
-DELAY=1
-ciphers=`openssl ciphers 'ALL:eNULL' | sed -e 's/:/ /g'`
+server=''
+port=''
+verbose=false
+delay=1
+ciphers=$(openssl ciphers 'ALL:eNULL:aNULL' | sed -e 's/:/ /g')
+highSuite=$(openssl ciphers 'HIGH' | sed -e 's/:/ /g')
+mediumSuite=$(openssl ciphers 'MEDIUM' | sed -e 's/:/ /g')
+lowSuite=$(openssl ciphers 'LOW' | sed -e 's/:/ /g')
+noEncryptSuite=$(openssl ciphers 'eNULL' | sed -e 's/:/ /g')
+noAuthSuite=$(openssl ciphers 'aNULL' | sed -e 's/:/ /g')
 
-echo Obtaining cipher list from `openssl version`.
+echo "Obtained cipher list from $(openssl version)."
 
-for cipher in ${ciphers[@]}
-do
-echo -n Testing $cipher...
-result=`echo -n | openssl s_client -cipher "$cipher" -connect $SERVER 2>&1`
-if [[ "$result" =~ "Cipher is " ]] ; then
-  echo YES
+# print usage instructions
+function usage() {
+	echo "Usage: $0 [options] server port"
+	echo "  -h	print these usage instructions"
+	echo "  -v	verbose output"
+	echo "  server	IP address or FQDN of the server to test"
+	echo "  port	port number of the service to test"
+}
+
+function in_array()
+{
+	local hay
+	needle=$1
+	shift
+	# array() undefined
+	[ -z "$1" ] && return 1
+	for hay in $*; do
+		[ "$hay" == "$needle" ] && return 0
+	done
+	return 1
+}
+
+# handle arguments
+if [ $# -gt 0 ]; then
+	while [ $# -gt 0 ]; do
+		# requesting help?
+		if [ "$1" = "-h" ]; then
+			# print usage and exit
+			usage
+			exit 0
+		# requesting verbose output?
+		elif [ "$1" = "-v" ]; then
+			verbose=true
+			shift
+		# handle server & port arguments
+		else
+			server="$1"
+			shift
+			port="$1"
+			shift
+		fi
+	done
 else
-  if [[ "$result" =~ ":error:" ]] ; then
-    error=`echo -n $result | cut -d':' -f6`
-    echo NO \($error\)
-  else
-    echo UNKNOWN RESPONSE
-    echo $result
-  fi
+	usage
+	exit 1;
 fi
-sleep $DELAY
+
+echo "Testing ciphers on $server:$port..."
+for cipher in ${ciphers[@]}; do
+	# display the cipher name & suite
+	echo -n "$cipher ("
+	if in_array "$cipher" "${highSuite[@]}" ; then
+		echo -n "HIGH"
+	elif in_array "$cipher" "${mediumSuite[@]}" ; then
+		echo -n "MEDIUM"
+	elif in_array "$cipher" "${lowSuite[@]}" ; then
+		echo -n "LOW"
+	elif in_array "$cipher" "${noEncryptSuite[@]}" ; then
+		echo -n "eNULL"
+	elif in_array "$cipher" "${noAuthSuite[@]}" ; then
+		echo -n "aNULL"
+	else
+		echo -n "UNKNOWN"
+	fi
+	echo -n ")... "
+	
+	# test the cipher under 
+	result=$(echo -n | openssl s_client -cipher "$cipher" -connect "$server:$port" 2>&1)
+	if [[ "$result" =~ "Cipher is " ]] ; then
+		echo "YES"
+	else
+		if [[ "$result" =~ ":error:" ]] ; then
+			echo "NO"
+			if $verbose; then
+				error=$(echo -n "$result" | cut -d ':' -f6)
+				printf "\t"
+				echo $error
+			fi
+		else
+			echo "UNKNOWN RESPONSE"
+			echo "$result"
+		fi
+	fi
+	sleep $delay
 done
+
+echo -n "Testing SSLv2 support on $server:$port... " 
+result=$(echo -n | openssl s_client -ssl2 -connect "$server:$port" 2>&1)
+if [[ "$result" =~ "Cipher is" ]] ; then
+	echo "Supported. INSECURE!"
+else
+	echo "Unsupported. (Secure.)"
+fi
+if $verbose; then
+	error=$(echo -n "$result" | cut -d ':' -f6)
+	printf "\t"
+	echo $error
+fi
+echo -n "Testing SSL secure renegotiation on $server:$port... "
+echo -n "" | openssl s_client -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
