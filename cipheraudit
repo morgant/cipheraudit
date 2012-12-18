@@ -48,6 +48,38 @@ function in_array()
 	return 1
 }
 
+function max_strlen_in_array()
+{
+	local str
+	local len=0
+	
+	for str in $*; do
+		if [ "${#str}" -gt "$len" ]; then
+			len="${#str}"
+		fi
+	done
+	
+	return $len
+}
+
+function max_pretty_cipher_strlen()
+{
+	local len=0
+	local maxCiphersLen=0
+	local maxAliasLen=0
+	
+	max_strlen_in_array ${ciphers[@]}
+	maxCipherLen=$?
+	max_strlen_in_array HIGH MEDIUM LOW eNULL aNULL UNKNOWN
+	maxAliasLen=$?
+	
+	# cipher name + space + open parentheses + alias name + close parentheses + ellipses:
+	# <cipher> (<alias>)...
+	len=$(( $maxCipherLen + $maxAliasLen + 6 ))
+	
+	return $len
+}
+
 # handle arguments
 if [ $# -gt 0 ]; then
 	while [ $# -gt 0 ]; do
@@ -92,24 +124,27 @@ else
 	exit 1;
 fi
 
+max_pretty_cipher_strlen
+maxPrettyCipherLen=$?
 echo "Testing ciphers on $server:$port..."
 for cipher in ${ciphers[@]}; do
 	# display the cipher name & suite
-	echo -n "$cipher ("
+	prettyCipher="$cipher ("
 	if in_array "$cipher" "${highSuite[@]}" ; then
-		echo -n "HIGH"
+		prettyCipher="${prettyCipher}HIGH"
 	elif in_array "$cipher" "${mediumSuite[@]}" ; then
-		echo -n "MEDIUM"
+		prettyCipher="${prettyCipher}MEDIUM"
 	elif in_array "$cipher" "${lowSuite[@]}" ; then
-		echo -n "LOW"
+		prettyCipher="${prettyCipher}LOW"
 	elif in_array "$cipher" "${noEncryptSuite[@]}" ; then
-		echo -n "eNULL"
+		prettyCipher="${prettyCipher}eNULL"
 	elif in_array "$cipher" "${noAuthSuite[@]}" ; then
-		echo -n "aNULL"
+		prettyCipher="${prettyCipher}aNULL"
 	else
-		echo -n "UNKNOWN"
+		prettyCipher="${prettyCipher}UNKNOWN"
 	fi
-	echo -n ")... "
+	prettyCipher="${prettyCipher})..."
+	printf "%-${maxPrettyCipherLen}s " "$prettyCipher"
 	
 	# test the cipher under 
 	result=$(echo -n | openssl s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)
