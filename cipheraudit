@@ -9,21 +9,28 @@
 #                       stand-alone tool requiring no editing to test different hosts/ports.
 # v0.3   - 2012-04-30 - Morgan Aldridge
 #                       Added support for the SMTP protocol.
+# v0.4   - 2014-12-23 - Morgan Aldridge
+#                       Support for OPENSSL_BIN_PATH environment variable to override OpenSSL
+#                       binary used.
 # 
+
+if [ -z "$OPENSSL_BIN_PATH" ]; then
+	OPENSSL_BIN_PATH="/usr/bin"
+fi
 
 server=''
 port=''
 protocol=''
 verbose=false
 delay=1
-ciphers=$(openssl ciphers 'ALL:eNULL:aNULL' | sed -e 's/:/ /g')
-highSuite=$(openssl ciphers 'HIGH' | sed -e 's/:/ /g')
-mediumSuite=$(openssl ciphers 'MEDIUM' | sed -e 's/:/ /g')
-lowSuite=$(openssl ciphers 'LOW' | sed -e 's/:/ /g')
-noEncryptSuite=$(openssl ciphers 'eNULL' | sed -e 's/:/ /g')
-noAuthSuite=$(openssl ciphers 'aNULL' | sed -e 's/:/ /g')
+ciphers=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'ALL:eNULL:aNULL' | sed -e 's/:/ /g')
+highSuite=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'HIGH' | sed -e 's/:/ /g')
+mediumSuite=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'MEDIUM' | sed -e 's/:/ /g')
+lowSuite=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'LOW' | sed -e 's/:/ /g')
+noEncryptSuite=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'eNULL' | sed -e 's/:/ /g')
+noAuthSuite=$("${OPENSSL_BIN_PATH}/openssl" ciphers 'aNULL' | sed -e 's/:/ /g')
 
-echo "Obtained cipher list from $(openssl version)."
+echo "Obtained cipher list from $("${OPENSSL_BIN_PATH}/openssl" version)."
 
 # print usage instructions
 function usage() {
@@ -147,7 +154,7 @@ for cipher in ${ciphers[@]}; do
 	printf "%-${maxPrettyCipherLen}s " "$prettyCipher"
 	
 	# test the cipher under 
-	result=$(echo -n | openssl s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)
+	result=$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)
 	if [[ "$result" =~ "Cipher is " ]] ; then
 		echo "YES"
 	else
@@ -167,7 +174,7 @@ for cipher in ${ciphers[@]}; do
 done
 
 echo -n "Testing SSLv2 support on $server:$port... " 
-result=$(echo -n | openssl s_client -ssl2 $protocol -connect "$server:$port" 2>&1)
+result=$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client -ssl2 $protocol -connect "$server:$port" 2>&1)
 if [[ "$result" =~ "Cipher is" ]] ; then
 	echo "Supported. INSECURE!"
 else
@@ -179,4 +186,4 @@ if $verbose; then
 	echo $error
 fi
 echo -n "Testing SSL secure renegotiation on $server:$port... "
-echo -n "" | openssl s_client $protocol -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
+echo -n "" | "${OPENSSL_BIN_PATH}/openssl" s_client $protocol -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
