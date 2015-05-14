@@ -12,6 +12,8 @@
 # v0.4   - 2014-12-23 - Morgan Aldridge
 #                       Support for OPENSSL_BIN_PATH environment variable to override OpenSSL
 #                       binary used.
+# v0.5   - 2015-05-14 - Morgan Aldridge
+#                       Tests for SSLv3 & TLSv1.0 support. XMPP protocol support.
 # 
 
 if [ -z "$OPENSSL_BIN_PATH" ]; then
@@ -112,6 +114,9 @@ if [ $# -gt 0 ]; then
 				imap)
 					protocol="-starttls imap -crlf"
 					;;
+				xmpp)
+					protocol="-starttls xmpp -crlf"
+					;;
 				*)
 					echo "ERROR: Unknown protocol '$1' specified! Unable to proceed!"
 					exit 1
@@ -129,6 +134,11 @@ if [ $# -gt 0 ]; then
 else
 	usage
 	exit 1;
+fi
+
+if $verbose; then
+	echo "All ciphers: ${ciphers[@]}"
+	echo "openssl path: ${OPENSSL_BIN_PATH}"
 fi
 
 max_pretty_cipher_strlen
@@ -154,7 +164,7 @@ for cipher in ${ciphers[@]}; do
 	printf "%-${maxPrettyCipherLen}s " "$prettyCipher"
 	
 	# test the cipher under 
-	result=$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)
+	result="$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client $protocol -cipher "$cipher" -connect "$server:$port" 2>&1)"
 	if [[ "$result" =~ "Cipher is " ]] ; then
 		echo "YES"
 	else
@@ -173,17 +183,47 @@ for cipher in ${ciphers[@]}; do
 	sleep $delay
 done
 
+# test for SSLv2
 echo -n "Testing SSLv2 support on $server:$port... " 
-result=$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client -ssl2 $protocol -connect "$server:$port" 2>&1)
+result="$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client -ssl2 $protocol -connect "$server:$port" 2>&1)"
 if [[ "$result" =~ "Cipher is" ]] ; then
 	echo "Supported. INSECURE!"
 else
-	echo "Unsupported. (Secure.)"
+	echo "Unsupported. (Secure)"
 fi
 if $verbose; then
 	error=$(echo -n "$result" | cut -d ':' -f6)
 	printf "\t"
 	echo $error
 fi
+
+# test for SSLv3
+echo -n "Testing SSLv3 support on $server:$port... "
+result="$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client -ssl3 $protocol -connect "$server:$port" 2>&1)"
+if [[ "$result" =~ "Protocol  : SSLv3" ]]; then
+	echo "Supported. INSECURE!"
+else
+	echo "Unsupported. (Secure)"
+fi
+if $verbose; then
+	error=$(echo -n "$result" | cut -d ':' -f6)
+	printf "\t"
+	echo $error
+fi
+
+# test for TLSv1.0
+echo -n "Testing TLSv1.0 support on $server:$port... "
+result="$(echo -n | "${OPENSSL_BIN_PATH}/openssl" s_client -tls1 $protocol -connect "$server:$port" 2>&1)"
+if [[ "$result" =~ "Protocol  : TLSv1" ]]; then
+	echo "Supported. INSECURE!"
+else
+	echo "Unsupported. (Secure)"
+fi
+if $verbose; then
+	error=$(echo -n "$result" | cut -d ':' -f6)
+	printf "\t"
+	echo $error
+fi
+
 echo -n "Testing SSL secure renegotiation on $server:$port... "
 echo -n "" | "${OPENSSL_BIN_PATH}/openssl" s_client $protocol -connect "$server:$port" 2>&1 | grep 'Secure Renegotiation'
